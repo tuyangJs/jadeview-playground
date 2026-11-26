@@ -1,0 +1,59 @@
+{
+  "id": "go",
+  "language": "Go",
+  "displayName": "Go + JadeViewGo v3",
+  "version": "0.2.0",
+  "entry": "hosts/go/main.go",
+  "requirements": [
+    "Go 1.23+",
+    "Node.js 22+（构建及热更新）",
+    "JadeViewGo v3.0.0-beta.4（原生 ABI 0x00030003）"
+  ],
+  "devCommand": "go -C hosts/go run . --dev",
+  "runCommand": "go -C hosts/go run .",
+  "frontendArg": "--frontend <path>",
+  "devArg": "--dev [url]",
+  "capabilities": [
+    "window",
+    "layout",
+    "ipc",
+    "events",
+    "dialogs",
+    "tray",
+    "clipboard",
+    "storage",
+    "runtime",
+    "menus"
+  ],
+  "supportedExamples": [
+    "dwm",
+    "overlay",
+    "hidden",
+    "frameless",
+    "theme",
+    "flags",
+    "layout",
+    "bounds",
+    "navscript",
+    "empty",
+    "ipc",
+    "messages",
+    "events",
+    "dialogs",
+    "tray",
+    "clipboard",
+    "storage",
+    "runtime",
+    "profiles",
+    "menubar",
+    "contextmenu"
+  ],
+  "unsupportedExamples": {
+    "splash": "当前 Go SDK 未封装启动画面配置。",
+    "webpopup": "此 Go 宿主未实现自绘网页弹窗。",
+    "permissions": "当前 Go SDK 的权限回调没有三态策略。",
+    "resources": "当前 Go SDK 未提供资源交付模式查询；此宿主未开启本地文件预览。"
+  },
+  "frontendModule": "web/src/hosts/languages/go.ts",
+  "repository": "https://github.com/tuyangJs/jadeview-playground"
+}
