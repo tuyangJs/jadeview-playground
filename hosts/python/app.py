@@ -22,7 +22,40 @@ from .native import (Native, Bounds, WindowOptions, WebViewSettings, ObjectState
     MountCapabilities, Notification, IPC_CALLBACK, PERMISSION_CALLBACK, encode)
 from .sdk import JadeViewError, Menu, SplashOptions, WebView, Window, WindowFeatures
 
-ROOT = Path(__file__).resolve().parents[2]
+def resolve_root() -> Path:
+    """Resolve the workspace/bundle root for both source runs and compiled executables."""
+    onefile_dir = os.environ.get("NUITKA_ONEFILE_DIRECTORY")
+    if onefile_dir:
+        exe_dir = Path(onefile_dir).resolve()
+    elif "__compiled__" in globals():
+        argv0 = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+        exe_dir = argv0.parent if argv0 and (argv0.exists() or argv0.suffix.lower() == ".exe") else Path(sys.executable).resolve().parent
+    elif getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+    else:
+        return Path(__file__).resolve().parents[2]
+
+    for candidate in (exe_dir, exe_dir.parent):
+        if (candidate / "runtime").is_dir() and (
+            (candidate / "web" / "index.html").is_file()
+            or (candidate / "web" / "dist" / "index.html").is_file()
+        ):
+            return candidate
+    for candidate in (exe_dir, exe_dir.parent):
+        if (candidate / "runtime").is_dir() or (candidate / "web").is_dir():
+            return candidate
+    return exe_dir
+
+
+def resolve_default_frontend(root: Path) -> Path:
+    """Prefer `web/dist` when running in repo, or `web/` when deployed flat next to the exe."""
+    for candidate in (root / "web" / "dist", root / "web"):
+        if (candidate / "index.html").is_file():
+            return candidate
+    return root / "web" / "dist"
+
+
+ROOT = resolve_root()
 CHANNEL = "playground"
 APP_SIGNATURE = "jadeview-next-playground"
 APP_TITLE = "JadeView Playground"
@@ -1093,11 +1126,21 @@ class Playground:
             while self.native.lib.jadeview_exit_wait(1000) != 1:
                 print("Waiting for native handles and callbacks to drain…", flush=True)
 
+def fail_startup(parser: argparse.ArgumentParser, message: str):
+    if os.name == "nt" and sys.stderr is None:
+        try:
+            C.windll.user32.MessageBoxW(None, message, APP_TITLE, 0x10)
+        except Exception:
+            pass
+        raise SystemExit(2)
+    parser.error(message)
+
+
 def main():
     parser = argparse.ArgumentParser(description=APP_TITLE)
     parser.add_argument("--dll", type=Path, help="JadeView.dll or libJadeView.so")
     frontend = parser.add_mutually_exclusive_group()
-    frontend.add_argument("--frontend", type=Path, default=ROOT / "web/dist")
+    frontend.add_argument("--frontend", type=Path, default=resolve_default_frontend(ROOT))
     frontend.add_argument("--dev", nargs="?", const="", metavar="URL",
         help="启动 Vite 并加载其地址，也可连接已运行的本机 Vite 地址")
     parser.add_argument("--data", type=Path)
@@ -1106,10 +1149,10 @@ def main():
     library = args.dll or Path(os.environ.get("JADEVIEW_LIBRARY",
         str(ROOT / "runtime" / ("JadeView.dll" if os.name == "nt" else "libJadeView.so"))))
     if not library.is_file():
-        parser.error("Missing JadeView runtime. Put it in runtime/ or pass --dll PATH. See README.md.")
+        fail_startup(parser, f"未找到运行库: {library}\n请将 JadeView.dll 放入 runtime/ 或通过 --dll 指定路径。")
     if args.dev is None and not ((args.frontend / "index.html").is_file() or
             (args.frontend.is_file() and args.frontend.suffix.lower() in (".asar", ".japk"))):
-        parser.error("Missing web/dist. Run npm ci && npm run build, or use --dev.")
+        fail_startup(parser, f"未找到前端产物: {args.frontend}\n请先执行 npm run build 生成 web/dist，或使用 --dev。")
     data = args.data or ROOT / (".data" if args.dev is None else ".data/dev")
     server = nullcontext((None, None)) if args.dev is None else vite_frontend(ROOT, args.dev)
     try:
@@ -1128,6 +1171,6 @@ def main():
     except (OSError, RuntimeError, ValueError) as error:
         if getattr(error, "winerror", None) == 193:
             bits = C.sizeof(C.c_void_p) * 8
-            parser.error(f"当前 Python 是 {bits} 位。请使用与 JadeView.dll 同位数的 Python；x64 示例：py -3-64 run.py。")
-        parser.error(str(error))
+            fail_startup(parser, f"当前可执行程序是 {bits} 位，请使用与当前 JadeView.dll 相同位数的编译产物。")
+        fail_startup(parser, str(error))
     return 0

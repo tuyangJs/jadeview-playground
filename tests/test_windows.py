@@ -1,9 +1,11 @@
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from hosts.python.app import Playground
+from hosts.python.app import Playground, resolve_default_frontend, resolve_root
 
 
 class IndependentWindowTests(unittest.TestCase):
@@ -206,6 +208,24 @@ class IndependentWindowTests(unittest.TestCase):
         self.assertIn("Python", info["host"]["name"])
         self.assertIn("launchCommand", info["host"])
         self.assertEqual(info["host"]["repository"], "https://github.com/tuyangJs/jadeview-playground")
+
+    def test_resolve_root_prefers_external_runtime_parent_when_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "runtime").mkdir()
+            (root / "web" / "dist").mkdir(parents=True)
+            (root / "web" / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+            (root / "dist" / "web").mkdir(parents=True)
+            (root / "dist" / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+            fake_exe = root / "dist" / "playground.exe"
+            fake_exe.write_bytes(b"")
+            with patch("hosts.python.app.sys.frozen", True, create=True), \
+                 patch("hosts.python.app.sys.executable", str(fake_exe)):
+                self.assertEqual(resolve_root(), root)
+            with patch.dict("hosts.python.app.os.environ", {"NUITKA_ONEFILE_DIRECTORY": str(root / "dist")}):
+                (root / "dist" / "runtime").mkdir()
+                self.assertEqual(resolve_root(), root / "dist")
+                self.assertEqual(resolve_default_frontend(root / "dist"), root / "dist" / "web")
 
 
 if __name__ == "__main__":
