@@ -1,4 +1,4 @@
-from hosts.python.app import main
+from hosts.python.launcher import launch
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(launch())
